@@ -12,6 +12,7 @@ public class WaypointManagerWindow : EditorWindow
     public Transform waypointRoot;
     private List<Waypoint> selectedWaypoints = new List<Waypoint>();
     private Vector2 scrollPos = Vector2.zero;
+
     private void OnGUI(){
         SerializedObject obj = new SerializedObject(this);
         
@@ -41,12 +42,24 @@ public class WaypointManagerWindow : EditorWindow
         Repaint();
     }
 
+    private void checkSelectedWaypoints(){
+        if(selectedWaypoints.Count == 0) return;
+
+        foreach(Waypoint waypoint in selectedWaypoints){
+            if(waypoint != null) continue;
+
+            OnSelectionChange();
+            return;
+        }
+    }
+
     private void DrawButtons(){
         if(GUILayout.Button("Create Waypoint")) CreateWaypoint();
         if(selectedWaypoints != null){
+            checkSelectedWaypoints();
             Br();
             if(selectedWaypoints.Count == 1){
-                DrawLabel("Selected: "+selectedWaypoints[0].name, Color.yellow);
+                DrawLabel("Selected: " + selectedWaypoints[0].name, Color.yellow);
 
                 if(GUILayout.Button("Create Waypoint From Selected")) CreateWaypointFrom(selectedWaypoints[0]);
                 if(GUILayout.Button("Remove Waypoint")) RemoveWaypoint(selectedWaypoints[0]);
@@ -94,14 +107,16 @@ public class WaypointManagerWindow : EditorWindow
 
         if(waypointRoot.childCount > 1){
             Waypoint connectedWaypoint = waypointRoot.GetChild(waypointRoot.childCount - 2).GetComponent<Waypoint>();
-            newWaypoint.Connections.Add(connectedWaypoint);
-            connectedWaypoint.Connections.Add(newWaypoint);
+            newWaypoint.Connect(connectedWaypoint);
+            connectedWaypoint.Connect(newWaypoint);
 
             newWaypoint.transform.position = connectedWaypoint.transform.position;
             newWaypoint.transform.forward = connectedWaypoint.transform.forward;
         }
 
         Selection.activeGameObject = newWaypoint.gameObject;
+
+        Undo.RegisterCreatedObjectUndo(newWaypoint.gameObject, "Created new waypoint");
     }
 
     private void CreateWaypointFrom(Waypoint selectedWaypoint){
@@ -118,15 +133,12 @@ public class WaypointManagerWindow : EditorWindow
         newWaypoint.transform.SetSiblingIndex(selectedWaypoint.transform.GetSiblingIndex() + 1);
 
         Selection.activeGameObject = newWaypoint.gameObject;
+
+        Undo.RegisterCreatedObjectUndo(newWaypoint.gameObject, "Created new waypoint from selected waypoint");
     }
 
     private void RemoveWaypoint(Waypoint selectedWaypoint){
-        
-        foreach(Waypoint connection in selectedWaypoint.Connections){
-            connection.Disconnect(selectedWaypoint);
-        }
-
-        DestroyImmediate(selectedWaypoint.gameObject);
+        Undo.DestroyObjectImmediate(selectedWaypoint.gameObject);
     }
 
     private void ConnectToNewWaypoint(List<Waypoint> waypoints){
@@ -149,6 +161,8 @@ public class WaypointManagerWindow : EditorWindow
         waypointObject.transform.forward = forward;
 
         Selection.activeGameObject = newWaypoint.gameObject;
+
+        Undo.RegisterCreatedObjectUndo(newWaypoint.gameObject, "Created new waypoint and connected all selected waypoints");
     }
 
     private void ConnectWaypoints(List<Waypoint> waypoints){
@@ -162,6 +176,7 @@ public class WaypointManagerWindow : EditorWindow
     }
 
     private void ConnectWaypoint(Waypoint a, Waypoint b){
+        Undo.RecordObjects(new Object[]{a, b}, "Connected Waypoints");
         if(!a.Has(b)) a.Connect(b);
         if(!b.Has(a)) b.Connect(a);
     }
@@ -177,6 +192,7 @@ public class WaypointManagerWindow : EditorWindow
     }
 
     private void DisconnectWaypoint(Waypoint a, Waypoint b){
+        Undo.RecordObjects(new Object[]{a, b}, "Disconnected Waypoints");
         a.Disconnect(b);
         b.Disconnect(a);
     }
@@ -201,36 +217,42 @@ public class WaypointManagerWindow : EditorWindow
 
     private void MakeLocation(Waypoint selectedWaypoint){
         GameObject selectedObj = selectedWaypoint.gameObject;
+
         Location location = selectedObj.AddComponent<Location>();
-        
         location.Set(selectedWaypoint);
 
         foreach(Waypoint connection in selectedWaypoint.Connections){
-            connection.Connections.Remove(selectedWaypoint);
-            connection.Connections.Add(location);
+            if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "Waypoint To Location");
+
+            connection.Disconnect(selectedWaypoint);
+            connection.Connect(location);
         }
 
         selectedWaypoints.Remove(selectedWaypoint);
         selectedWaypoints.Add(location);
 
-        DestroyImmediate(selectedWaypoint);
+        Undo.RegisterCreatedObjectUndo(location, "Waypoint To Location");
+        Undo.DestroyObjectImmediate(selectedWaypoint);
     }
 
     private void MakeWaypoint(Waypoint selectedLocation){
         GameObject selectedObj = selectedLocation.gameObject;
+
         Waypoint waypoint = selectedObj.AddComponent<Waypoint>();
-        
         waypoint.Set(selectedLocation);
 
         foreach(Waypoint connection in selectedLocation.Connections){
-            connection.Connections.Remove(selectedLocation);
-            connection.Connections.Add(waypoint);
+            if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "Location To Waypoint");
+
+            connection.Disconnect(selectedLocation);
+            connection.Connect(waypoint);
         }
 
         selectedWaypoints.Remove(selectedLocation);
         selectedWaypoints.Add(waypoint);
 
-        DestroyImmediate(selectedLocation);
+        Undo.RegisterCreatedObjectUndo(waypoint, "Location To Waypoint");
+        Undo.DestroyObjectImmediate(selectedLocation);
     }
 
 }

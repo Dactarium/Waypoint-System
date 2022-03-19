@@ -22,17 +22,18 @@ public class WaypointEditor
 
         if(waypoint.Connections.Count > 0){
             Vector3 sourceForward = waypoint.transform.forward;
-
             foreach(Waypoint connection in waypoint.Connections){
+                if(connection == null) continue;
+                
                 Gizmos.color = Color.yellow;
-
+                
                 Vector3 targetForward = connection.transform.forward;
                 
                 waypoint.transform.LookAt(connection.transform);
                 connection.transform.LookAt(waypoint.transform);
 
-                Gizmos.DrawLine(waypoint.MinBound, connection.MaxBound);
-                Gizmos.DrawLine(waypoint.MaxBound, connection.MinBound);
+                Gizmos.DrawLine(waypoint.LeftBound, connection.RightBound);
+                Gizmos.DrawLine(waypoint.RightBound, connection.LeftBound);
 
                 connection.transform.forward = targetForward;
             }
