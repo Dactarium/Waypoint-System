@@ -7,6 +7,7 @@ public class Waypoint : MonoBehaviour
 {   
     [Range(0f, 5f)]
     public float Radius = .5f;
+    public Color Color = Color.yellow;
     [SerializeField] private List<Waypoint> _connections = new List<Waypoint>();
 
     ///<summary>
@@ -15,20 +16,33 @@ public class Waypoint : MonoBehaviour
     ///</summary>
     public List<Waypoint> Connections => new List<Waypoint>(_connections);
 
+    public Vector3 LeftBound => transform.position - transform.right * Radius;
+    public Vector3 RightBound => transform.position + transform.right * Radius;
+
     ///<summary>
     ///Get Random position in Radius.
     ///</summary>
-    public Vector3 GetPosition{
+    public Vector3 RandomPosition{
         get{
             Vector2 insideCircle = Random.insideUnitCircle * Radius;
-            return transform.right * insideCircle.x + transform.forward * insideCircle.y;
+            return transform.position + Vector3.right * insideCircle.x + Vector3.forward * insideCircle.y;
         }
     }
 
-    public Vector3 LeftBound => transform.position - transform.right * Radius;
-    public Vector3 RightBound => transform.position + transform.right * Radius;
+    ///<summary>
+    ///Sets Waypoint's Radius and Connections
+    ///</summary>
+    public void Set(Waypoint waypoint){
+        Radius = waypoint.Radius;
+        _connections = new List<Waypoint>(waypoint.Connections);
+    }
+
     public void Connect(Waypoint waypoint) => _connections.Add(waypoint);
     public bool Disconnect(Waypoint waypoint) => _connections.Remove(waypoint);
+
+    ///<summary>
+    ///Checks is Waypoint in The Connections
+    ///</summary>
     public bool Has(Waypoint waypoint){
         foreach(Waypoint connection in _connections){
             if(connection == waypoint) return true;
@@ -36,15 +50,32 @@ public class Waypoint : MonoBehaviour
         return false;
     }
 
-    public void Set(Waypoint waypoint){
-        Radius = waypoint.Radius;
-        _connections = new List<Waypoint>(waypoint.Connections);
+    public List<Waypoint> FindConnectionsWithTag(string tag){
+         List<Waypoint> waypoints = new List<Waypoint>();
+
+        foreach(Waypoint connection in _connections){
+            if(connection.CompareTag(tag)) waypoints.Add(connection);
+        }
+
+        if(waypoints.Count > 0)return waypoints;
+        return null;
     }
 
+    public List<Waypoint> FindConnectionsWithName(string name){
+         List<Waypoint> waypoints = new List<Waypoint>();
+
+        foreach(Waypoint connection in _connections){
+            if(connection.name.Equals(name)) waypoints.Add(connection);
+        }
+
+        if(waypoints.Count > 0)return waypoints;
+        return null;
+    }
+    
     void OnDestroy(){
         foreach(Waypoint connection in _connections){
             #if UNITY_EDITOR
-                if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "disconnected");
+                if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "Disconnected from destoryed object");
             #endif
 
             connection.Disconnect(this);

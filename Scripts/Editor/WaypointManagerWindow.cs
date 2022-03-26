@@ -9,22 +9,40 @@ public class WaypointManagerWindow : EditorWindow
         GetWindow<WaypointManagerWindow>();
     }
 
-    public Transform waypointRoot;
+    public WaypointRoot WaypointRoot;
+
+    [Tooltip("Affects Selection contains Waypoint")]
+    public bool WaypointSelection = false;
+
     private List<Waypoint> selectedWaypoints = new List<Waypoint>();
     private Vector2 scrollPos = Vector2.zero;
 
     private void OnGUI(){
         SerializedObject obj = new SerializedObject(this);
         
-        EditorGUILayout.PropertyField(obj.FindProperty("waypointRoot"));
+        EditorGUILayout.PropertyField(obj.FindProperty("WaypointSelection"), GUILayout.Width(165));
 
-        if(waypointRoot == null){
+        Br();
+        if(GUILayout.Button("Create New Waypoint Root")) CreateNewWaypointRoot();
+        
+        EditorGUILayout.PropertyField(obj.FindProperty("WaypointRoot"));
+        if(WaypointRoot == null){
             EditorGUILayout.HelpBox("Root transform must be selected. Please assign a root transform.", MessageType.Warning);
         }else{
+
+            if(WaypointSelection && selectedWaypoints.Count > 0){
+                GameObject[] selectedGameObjects = new GameObject[selectedWaypoints.Count];
+                for(int i = 0; i < selectedWaypoints.Count; i++){
+                   selectedGameObjects[i] = selectedWaypoints[i].gameObject;
+                }
+                Selection.objects = selectedGameObjects;
+            }
+
+            Br();
             EditorGUILayout.BeginVertical("box");
-            scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
-            DrawButtons();
-            EditorGUILayout.EndScrollView();
+                scrollPos = EditorGUILayout.BeginScrollView(scrollPos);
+                    DrawButtons();
+                EditorGUILayout.EndScrollView();
             EditorGUILayout.EndVertical();
         }
 
@@ -32,13 +50,22 @@ public class WaypointManagerWindow : EditorWindow
     }
 
     private void OnSelectionChange(){
-        GameObject[] selectedObjs = Selection.gameObjects;
+        Waypoint[] selectionWaypoints = Selection.GetFiltered<Waypoint>(SelectionMode.Unfiltered);
+        WaypointRoot selectedRoot = null;
         selectedWaypoints.Clear();
-        foreach(GameObject selectedObj in selectedObjs){
-            if(selectedObj.GetComponent<Waypoint>()){
-                selectedWaypoints.Add(selectedObj.GetComponent<Waypoint>());
+
+        if(selectedRoot == null && Selection.activeGameObject && Selection.activeGameObject.GetComponent<Waypoint>() && Selection.activeGameObject.transform.parent) selectedRoot = Selection.activeGameObject.transform.parent.GetComponent<WaypointRoot>();
+
+        foreach(Waypoint selectionWaypoint in selectionWaypoints){
+            if(!selectionWaypoint.transform.parent || !selectionWaypoint.transform.parent.GetComponent<WaypointRoot>()){
+                Debug.LogWarning($"Waypoint named \"{selectionWaypoint.name}\" must have parent type of WaypointRoot");
+                continue;
             }
+            if(selectedRoot == null) selectedRoot = selectionWaypoint.transform.parent.GetComponent<WaypointRoot>();
+            if(selectedRoot == selectionWaypoint.transform.parent.GetComponent<WaypointRoot>()) selectedWaypoints.Add(selectionWaypoint.GetComponent<Waypoint>());
         }
+
+        if(selectedRoot != null) WaypointRoot = selectedRoot;
         Repaint();
     }
 
@@ -58,55 +85,56 @@ public class WaypointManagerWindow : EditorWindow
         if(selectedWaypoints != null){
             checkSelectedWaypoints();
             Br();
+            if(selectedWaypoints.Count > 0){
+                WaypointRoot selectedRoot = selectedWaypoints[0].transform.parent.GetComponent<WaypointRoot>();
+                if(selectedRoot == null){
+                    GUI.enabled = false;
+                }else{
+                    GUI.enabled = selectedRoot == WaypointRoot;
+                }
+            }
             if(selectedWaypoints.Count == 1){
                 DrawLabel("Selected: " + selectedWaypoints[0].name, Color.yellow);
 
                 if(GUILayout.Button("Create Waypoint From Selected")) CreateWaypointFrom(selectedWaypoints[0]);
                 if(GUILayout.Button("Remove Waypoint")) RemoveWaypoint(selectedWaypoints[0]);
                 
-                Br();
-
-                if(selectedWaypoints[0].GetType() != typeof(Location) && GUILayout.Button("Make Location")) MakeLocation(selectedWaypoints[0]);
-                if(selectedWaypoints[0].GetType() == typeof(Location) && GUILayout.Button("Make Waypoint")) MakeWaypoint(selectedWaypoints[0]);
-
             }else if(selectedWaypoints.Count > 1){
                 DrawLabel(selectedWaypoints.Count + " Waypoints selected", Color.yellow);
                 if(GUILayout.Button("Connect to New Waypoint")) ConnectToNewWaypoint(selectedWaypoints);
                 if(GUILayout.Button("Connect Selected Waypoints")) ConnectWaypoints(selectedWaypoints);
                 if(GUILayout.Button("Disconnect Selected Waypoints")) DisconnectWaypoints(selectedWaypoints);
                 if(GUILayout.Button("Remove Selected Waypoints")) RemoveWaypoints(selectedWaypoints);
-
-                Br();
-
-                if(GUILayout.Button("Waypoint to Location")) WaypointToLocation(new List<Waypoint>(selectedWaypoints));
-                if(GUILayout.Button("Location to Waypoint")) LocationToWaypoint(new List<Waypoint>(selectedWaypoints));
-
             }
         }
     }
 
     private void Br() => DrawLabel("", Color.white);
-    
     private void DrawLabel(string label) => DrawLabel(label, Color.white);
-
-    private void DrawLabel(string label, Color color){
+    private void DrawLabel(string label, Color color) => DrawLabel(label, color, TextAnchor.MiddleCenter);
+    private void DrawLabel(string label, Color color, TextAnchor anchor){
         var c = GUI.color;
         GUI.color = color;
     
-        var style = new GUIStyle(GUI.skin.label) {alignment = TextAnchor.MiddleCenter};
+        var style = new GUIStyle(GUI.skin.label) {alignment = anchor};
         EditorGUILayout.LabelField(label, style, GUILayout.ExpandWidth(true));
         GUI.color = c;
     }
 
+    private void CreateNewWaypointRoot(){
+        GameObject waypointRootObj = new GameObject("Waypoint Root", typeof(WaypointRoot));
+
+        WaypointRoot = waypointRootObj.GetComponent<WaypointRoot>();
+    }
 
     private void CreateWaypoint(){
         GameObject waypointObject = new GameObject("Waypoint", typeof(Waypoint));
-        waypointObject.transform.SetParent(waypointRoot, false);
+        waypointObject.transform.SetParent(WaypointRoot.transform, false);
         
         Waypoint newWaypoint = waypointObject.GetComponent<Waypoint>();
 
-        if(waypointRoot.childCount > 1){
-            Waypoint connectedWaypoint = waypointRoot.GetChild(waypointRoot.childCount - 2).GetComponent<Waypoint>();
+        if(WaypointRoot.transform.childCount > 1){
+            Waypoint connectedWaypoint = WaypointRoot.transform.GetChild(WaypointRoot.transform.childCount - 2).GetComponent<Waypoint>();
             newWaypoint.Connect(connectedWaypoint);
             connectedWaypoint.Connect(newWaypoint);
 
@@ -121,7 +149,7 @@ public class WaypointManagerWindow : EditorWindow
 
     private void CreateWaypointFrom(Waypoint selectedWaypoint){
         GameObject waypointObject = new GameObject("Waypoint", typeof(Waypoint));
-        waypointObject.transform.SetParent(waypointRoot, false);
+        waypointObject.transform.SetParent(WaypointRoot.transform, false);
         
         Waypoint newWaypoint = waypointObject.GetComponent<Waypoint>();
 
@@ -143,7 +171,7 @@ public class WaypointManagerWindow : EditorWindow
 
     private void ConnectToNewWaypoint(List<Waypoint> waypoints){
         GameObject waypointObject = new GameObject("Waypoint", typeof(Waypoint));
-        waypointObject.transform.SetParent(waypointRoot, false);
+        waypointObject.transform.SetParent(WaypointRoot.transform, false);
         
         Waypoint newWaypoint = waypointObject.GetComponent<Waypoint>();
         
@@ -201,58 +229,6 @@ public class WaypointManagerWindow : EditorWindow
         foreach(Waypoint waypoint in waypoints){
             RemoveWaypoint(waypoint);
         }
-    }
-
-    private void WaypointToLocation(List<Waypoint> waypoints){
-        foreach(Waypoint waypoint in waypoints){
-            if(waypoint.GetType() != typeof(Location)) MakeLocation(waypoint);
-        }
-    }
-
-    private void LocationToWaypoint(List<Waypoint> waypoints){
-        foreach(Waypoint waypoint in waypoints){
-            if(waypoint.GetType() == typeof(Location)) MakeWaypoint(waypoint);
-        }
-    }
-
-    private void MakeLocation(Waypoint selectedWaypoint){
-        GameObject selectedObj = selectedWaypoint.gameObject;
-
-        Location location = selectedObj.AddComponent<Location>();
-        location.Set(selectedWaypoint);
-
-        foreach(Waypoint connection in selectedWaypoint.Connections){
-            if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "Waypoint To Location");
-
-            connection.Disconnect(selectedWaypoint);
-            connection.Connect(location);
-        }
-
-        selectedWaypoints.Remove(selectedWaypoint);
-        selectedWaypoints.Add(location);
-
-        Undo.RegisterCreatedObjectUndo(location, "Waypoint To Location");
-        Undo.DestroyObjectImmediate(selectedWaypoint);
-    }
-
-    private void MakeWaypoint(Waypoint selectedLocation){
-        GameObject selectedObj = selectedLocation.gameObject;
-
-        Waypoint waypoint = selectedObj.AddComponent<Waypoint>();
-        waypoint.Set(selectedLocation);
-
-        foreach(Waypoint connection in selectedLocation.Connections){
-            if(connection != null) Undo.RegisterCompleteObjectUndo(connection, "Location To Waypoint");
-
-            connection.Disconnect(selectedLocation);
-            connection.Connect(waypoint);
-        }
-
-        selectedWaypoints.Remove(selectedLocation);
-        selectedWaypoints.Add(waypoint);
-
-        Undo.RegisterCreatedObjectUndo(waypoint, "Location To Waypoint");
-        Undo.DestroyObjectImmediate(selectedLocation);
     }
 
 }

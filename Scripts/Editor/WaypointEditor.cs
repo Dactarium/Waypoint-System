@@ -13,10 +13,8 @@ public class WaypointEditor
         }
 
         Gizmos.DrawSphere(waypoint.transform.position, .1f);
-
         
-        Handles.color = Color.yellow;
-        if(waypoint.GetType() == typeof(Location)) Handles.color = Color.red;
+        Handles.color =waypoint.Color;
 
         Handles.DrawSolidDisc(waypoint.transform.position, waypoint.transform.up, waypoint.Radius);
 
@@ -25,7 +23,7 @@ public class WaypointEditor
             foreach(Waypoint connection in waypoint.Connections){
                 if(connection == null) continue;
                 
-                Gizmos.color = Color.yellow;
+                Gizmos.color = waypoint.transform.parent.GetComponent<WaypointRoot>().ConnectionColor;
                 
                 Vector3 targetForward = connection.transform.forward;
                 
